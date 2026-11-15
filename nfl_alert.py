@@ -13,7 +13,7 @@ TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 BASE_URL = "https://v1.american-football.api-sports.io"
 STATE_FILE = Path("nfl_state.json")
 
-MAX_REQUESTS_PER_RUN = 5
+MAX_REQUESTS_PER_RUN = 2
 MIN_REQUESTS_REMAINING = 10
 
 requests_used = 0
