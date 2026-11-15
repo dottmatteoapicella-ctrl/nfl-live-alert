@@ -4,7 +4,7 @@ name: NFL Live Alert
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/20 * * * *"
+- cron: "*/30 17-23,0-5 * * *"
 
 permissions:
   contents: write
