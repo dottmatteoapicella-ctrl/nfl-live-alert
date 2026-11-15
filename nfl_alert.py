@@ -1,7 +1,7 @@
 
 import os
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import requests
@@ -42,10 +42,11 @@ def api_get(endpoint, params):
 
     requests_used += 1
 
-    if "x-ratelimit-requests-remaining" in response.headers:
-        requests_remaining = int(
-            response.headers["x-ratelimit-requests-remaining"]
-        )
+    remaining = response.headers.get(
+        "x-ratelimit-requests-remaining"
+    )
+    if remaining is not None:
+        requests_remaining = int(remaining)
 
     data = response.json()
 
@@ -70,7 +71,9 @@ def send_telegram(message):
 
 def load_state():
     if STATE_FILE.exists():
-        return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        return json.loads(
+            STATE_FILE.read_text(encoding="utf-8")
+        )
     return {"favorites": {}, "alerts": []}
 
 
@@ -101,20 +104,40 @@ def get_favorite(game_id):
             if "Home" in values and "Away" in values:
                 if values["Home"] == values["Away"]:
                     return None
-                return "home" if values["Home"] < values["Away"] else "away"
+
+                return (
+                    "home"
+                    if values["Home"] < values["Away"]
+                    else "away"
+                )
 
     return None
 
 
 def main():
     state = load_state()
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(timezone.utc).date()
 
-    games = api_get("games", {"date": today})
+    # Alterna i controlli tra oggi e domani,
+    # rispettando il limite di 2 richieste per esecuzione.
+    now = datetime.now(timezone.utc)
+
+    if now.minute < 30:
+        target_date = today
+    else:
+        target_date = today + timedelta(days=1)
+
+    games = api_get(
+        "games",
+        {"date": target_date.isoformat()}
+    )
 
     if games is None:
         print("Impossibile recuperare le partite.")
         return
+
+    print("Data controllata:", target_date)
+    print("Partite trovate:", len(games))
 
     for item in games:
         game = item["game"]
@@ -127,11 +150,19 @@ def main():
         if status == "NS":
             if game_id not in state["favorites"]:
                 favorite = get_favorite(game_id)
+
                 if favorite:
                     state["favorites"][game_id] = favorite
+                    print(
+                        "Favorita salvata:",
+                        game_id,
+                        favorite
+                    )
             continue
 
-        if status not in ("Q1", "Q2", "Q3", "Q4", "OT", "HT"):
+        if status not in (
+            "Q1", "Q2", "Q3", "Q4", "OT", "HT"
+        ):
             continue
 
         favorite = state["favorites"].get(game_id)
@@ -146,26 +177,33 @@ def main():
             continue
 
         losing = (
-            favorite == "home" and home_score < away_score
+            favorite == "home"
+            and home_score < away_score
         ) or (
-            favorite == "away" and away_score < home_score
+            favorite == "away"
+            and away_score < home_score
         )
 
         if losing:
-            favorite_name = home if favorite == "home" else away
+            favorite_name = (
+                home if favorite == "home" else away
+            )
 
             message = (
                 "🏈 NFL - FAVORITA IN SVANTAGGIO!\n\n"
-                f"{home} {home_score} - {away_score} {away}\n"
+                f"{home} {home_score} - "
+                f"{away_score} {away}\n"
                 f"Favorita pre-match: {favorite_name}\n"
                 f"Periodo: {status}"
             )
 
             send_telegram(message)
             state["alerts"].append(game_id)
+
             print("Avviso inviato:", game_id)
 
     save_state(state)
+
     print("Richieste API utilizzate:", requests_used)
     print("Richieste API rimaste:", requests_remaining)
 
