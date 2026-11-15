@@ -1,0 +1,49 @@
+
+name: NFL Live Alert
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/20 * * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nfl-live-alert
+  cancel-in-progress: false
+
+jobs:
+  nfl-alert:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Scarica repository
+        uses: actions/checkout@v4
+
+      - name: Installa Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Installa requests
+        run: pip install requests
+
+      - name: Esegui bot NFL
+        env:
+          NFL_API_KEY: ${{ secrets.NFL_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python nfl_alert.py
+
+      - name: Salva quote e avvisi
+        run: |
+          if [ -f nfl_state.json ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add nfl_state.json
+            if ! git diff --cached --quiet; then
+              git commit -m "Aggiorna stato NFL"
+              git push
+            fi
+          fi
