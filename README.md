@@ -1,1 +1,1 @@
-# nfl-live-alert.
+# nfl-live-alert
